@@ -6,6 +6,7 @@ from sys import executable
 import concurrent.futures
 import asyncio
 
+import nicegui
 import pandas
 
 
@@ -91,12 +92,14 @@ class FileHandler:
         if '' in self.check_chars:
             self.check_chars.remove('')
         new_chars = []
+        # escape characters which need to be escaped in regex (pop old one from list, add escaped version)
         for c in self.check_chars:
             if c in characters_to_escape_in_regex:
                 c_new = re.escape(c)
                 self.check_chars.remove(c)
                 new_chars.append(c_new)
         self.check_chars += new_chars
+        # build regex with or (|) from character list > this will match all characters specified
         for c in self.check_chars:
             self.check_chars_regex = '|'.join(self.check_chars)
 
@@ -113,48 +116,61 @@ class FileHandler:
             for col in self.dataframe:
                 filtered_df = await loop.run_in_executor(
                     executor,
+                    # search the dataframe for the specified regex build from user character choice
                     lambda col=col: self.dataframe[
                         self.dataframe[col].astype(str).str.contains(self.check_chars_regex, na=False, regex=True)]
                 )
+                # if the filtered dataset is not empty, we save its row count and percentage of total rows for later use
                 if not filtered_df.empty:
                     len_df = len(filtered_df)
                     self.cols_with_char[col] = (len_df, f"{len_df/self.dataframe_length * 100:.2f}%")
 
     def get_filtered_rows(self, column_name: str ,head: int =10) -> pandas.DataFrame:
+        """returns the top x rows (head, default 10) of the dataframe filtered on column column_name and on the chars
+        in self.check_chars_regex"""
         return self.dataframe[
             self.dataframe[column_name].astype(str).str.contains(self.check_chars_regex, na=False)].head(head)
+
 
 async def load_file_and_set_dataframe() -> None:
     analyze_button.set_visibility(False)
     analyze_button.update()
     file_path = await choose_file()
-    # i would like to display the loading spinner here, but its not working. idk why
-    fileHandler.set_file_path(file_path[0])
+    path_label.set_visibility(False)
+    loading_spinner_file.set_visibility(True)
+    # we need this so the control is yielded back to the event loop and the ui is updated, without this the spinner is
+    # not shown.
+    await asyncio.sleep(0.1)
+    fileHandler.set_file_path(file_path)
     fileHandler.set_dataframe_from_filepath()
     analyze_button.set_visibility(True)
     analyze_button.update()
+    loading_spinner_file.set_visibility(False)
+    path_label.set_visibility(True)
     path_label.text = str(fileHandler.path)
-    loading_spinner.set_visibility(False)
 
 
 async def choose_file() -> str:
     file_types = ('CSV Files (*.csv)', 'All files (*.*)') # for some reason i can not only use the CSV part here. idk..
+    # this always returns a list of files even when only 1 is chosen.
     files = await app.native.main_window.create_file_dialog(webview.OPEN_DIALOG, allow_multiple=False, file_types=file_types)
-    return files
+    return files[0]
 
 
 def kill_script() -> None:
+    """this should trigger on shutdown of the ui and kill the rest of the script. for some reason this does not work
+    cleanly. currently this is only pass through function to sys.exit()."""
     sys.exit()
 
 
 async def analyzer_click() -> None:
     try:
         result_table.set_visibility(False)
-        loading_spinner.set_visibility(True)
+        loading_spinner_analyzer.set_visibility(True)
         analyze_button.set_visibility(False)
         await fileHandler.analyze_dataframe()
         populate_result_table()
-        loading_spinner.set_visibility(False)
+        loading_spinner_analyzer.set_visibility(False)
         analyze_button.set_visibility(True)
     except Exception as e:
         ui.notify(e)
@@ -186,7 +202,6 @@ def show_data_rows(col_name: str) -> None:
     panels.update()
 
 
-
 if __name__ in ("__main__", "__mp_main__"):
     app.on_shutdown(kill_script)  # sys exit is triggered here, for some reason that does not cleanly exit the script.. the script is exited by crashing though
     fileHandler = FileHandler('', '')
@@ -203,18 +218,20 @@ if __name__ in ("__main__", "__mp_main__"):
 
             with ui.expansion('file:', value=True).classes('w-full'):
                 path_label = ui.label('--no file chosen--')
+                loading_spinner_file = ui.spinner(size='lg')
+                loading_spinner_file.set_visibility(False)
 
             # how can we make this so that we also update the value list and regex when this is changed
-            check_character_input = ui.input(label='Character to check for (multiple divided by spaces)', value=',')
+            check_character_input = ui.input(label='Character to check for', value=',')
             check_character_input.bind_value(fileHandler, 'check_char_user_input')
+            check_character_input.tooltip("You can add multiple values by separating them with a space")
             check_character_input.on_value_change(fileHandler.update_check_values_and_regex)
-
 
             analyze_button = ui.button('analyze file', on_click=analyzer_click)
             analyze_button.set_visibility(False)
 
-            loading_spinner = ui.spinner(size='lg')
-            loading_spinner.set_visibility(False)
+            loading_spinner_analyzer = ui.spinner(size='lg')
+            loading_spinner_analyzer.set_visibility(False)
 
             result_table = ui.table(columns=[], rows=[])
             result_table.add_slot('body-cell-title', r'<td><a :href="props.row.url">{{ props.row.title }}</a></td>')
@@ -225,4 +242,10 @@ if __name__ in ("__main__", "__mp_main__"):
             data_table = ui.table(columns=[], rows=[])
             data_table.set_visibility(False)
 
-    ui.run(native=True, dark=True, reload=False, title='csv character analyzer', window_size=(500,800))
+    ui.run(native=True,
+           dark=True,
+           reload=False,
+           title='csv character analyzer',
+           window_size=(500,800),
+           favicon='CharacterCheckIcon_128.png')
+    #favicon only works in browser mode, it seems we cant change the app icon in native mode.
