@@ -213,6 +213,7 @@ async def reload_file_and_dataframe() -> None:
         path_label.set_visibility(True)
         result_table.set_visibility(False)
         data_table.set_visibility(False)
+        data_label.set_visibility(False)
     else:
         ui.notify("No file loaded.")
 
@@ -283,6 +284,7 @@ def show_data_rows(col_name: str) -> None:
     data_table.rows = filtered_df.to_dict('records')
     data_table.update()
     data_table.set_visibility(True)
+    data_label.set_visibility(True)
     panels.set_value('Data Preview')
     panels.update()
 
@@ -330,6 +332,7 @@ if __name__ in ("__main__", "__mp_main__"):
             result_table.set_visibility(False)
         with ui.tab_panel(data_view):
             data_label = ui.label('')
+            data_label.set_visibility(False)
             data_table = ui.table(columns=[], rows=[])
             data_table.set_visibility(False)
         with ui.tab_panel(export_page):
