@@ -78,10 +78,10 @@ class FileHandler:
             # usecols=lambda c: not c.startswith('Unnamed:') we use this to surpress unnamed cols in broken csvs
             self.dataframe = pd.read_csv(self.path, encoding=self.encoding, low_memory=False, header=self.file_header,
                                          dtype=str, na_values='',
-                                         usecols=lambda c: not c.startswith('Unnamed:'))
+                                         usecols=lambda c: not c.startswith('Unnamed:'), engine='c')
         else:
             self.dataframe = pd.read_csv(self.path, encoding=self.encoding, low_memory=False, header=self.file_header
-                                         , dtype=str, na_values='')
+                                         , dtype=str, na_values='', engine='c')
         self.dataframe_length = len(self.dataframe)
 
     def set_encoding(self, encoding: str) -> None:
