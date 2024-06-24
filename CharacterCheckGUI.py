@@ -87,14 +87,20 @@ class FileHandler:
     def set_dataframe_from_filepath(self) -> None:
         """Grabs dataframe from csv file and sets total length of the df within the fileHandler class."""
         # for some reason this does not work for .pyw files any longer..
+        chunksize = 50000
         if self.supress_unnamed_columns:
             # usecols=lambda c: not c.startswith('Unnamed:') we use this to surpress unnamed cols in broken csvs
-            self.dataframe = pd.read_csv(self.path, encoding=self.encoding, low_memory=False, header=self.file_header,
+            chunks_iter = pd.read_csv(self.path, encoding=self.encoding, low_memory=False, header=self.file_header,
                                              dtype=str, na_values='',
-                                             usecols=lambda c: not c.startswith('Unnamed:'), engine='c')
+                                             usecols=lambda c: not c.startswith('Unnamed:'), engine='c', chunksize=chunksize)
         else:
-            self.dataframe = pd.read_csv(self.path, encoding=self.encoding, low_memory=False, header=self.file_header
-                                         , dtype=str, na_values='', engine='c')
+            chunks_iter = pd.read_csv(self.path, encoding=self.encoding, low_memory=False, header=self.file_header
+                                         , dtype=str, na_values='', engine='c', chunksize=chunksize)
+
+        chunks = []
+        for chunk in chunks_iter:
+            chunks.append(chunk)
+        self.dataframe = pd.concat(chunks, ignore_index=True)
         self.dataframe_length = len(self.dataframe)
 
     def set_encoding(self, encoding: str) -> None:
@@ -217,11 +223,14 @@ async def load_file_and_set_dataframe() -> None:
     except Exception as e:
         ui.notify(f"Dataframe couldn't be build. \n {e}")
         return
+    await sleep(0.1)
     analyze_button.set_visibility(True)
-    analyze_button.update()
     loading_spinner_file.set_visibility(False)
     path_label.set_visibility(True)
     path_label.text = str(fileHandler.path)
+    loading_spinner_file.update()
+    analyze_button.update()
+    path_label.update()
 
 
 async def reload_file_and_dataframe() -> None:
