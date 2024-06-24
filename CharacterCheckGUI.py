@@ -171,6 +171,9 @@ class FileHandler:
 async def load_file_and_set_dataframe() -> None:
     analyze_button.set_visibility(False)
     analyze_button.update()
+    data_table.set_visibility(False)
+    data_label.set_visibility(False)
+    result_table.set_visibility(False)
     try:
         file_path = await choose_file()
     except Exception as e:
