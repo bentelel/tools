@@ -50,7 +50,7 @@ class FileHandler:
         self.check_chars_regex = ','
         self.cols_with_char = {}
         self.dataframe_length = 0
-        self.file_header = 1
+        self.file_header = 0 # zero based row index!
         self.transformed_df = pd.DataFrame([])
 
     def __new__(cls, file_path, encoding):
@@ -60,7 +60,7 @@ class FileHandler:
 
     def toggle_header_mode(self, event) -> None:
         if event:
-            self.file_header = 1
+            self.file_header = 0 # zero based row index!
         else:
             self.file_header = None
 
@@ -137,11 +137,10 @@ class FileHandler:
         file_name = f"{self.path.stem}_{timestamp}"
         file_suffix = self.path.suffix # should be .csv anyhow
         export_path_with_file = f"{export_path}/{file_name}{file_suffix}"
-        print(export_path_with_file)
         if self.file_header is None:
             has_header = False
         else:
-            has_header = True
+            has_header = [str(col) for col in self.transformed_df.columns]
         # currently we loose the quoting around values if it is not needed, even when it is present in the initial
         # file. I am not sure if that is a plus or minus..
         self.transformed_df.to_csv(Path(export_path_with_file),
