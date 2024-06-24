@@ -143,13 +143,21 @@ class FileHandler:
             has_header = [str(col) for col in self.transformed_df.columns]
         # currently we loose the quoting around values if it is not needed, even when it is present in the initial
         # file. I am not sure if that is a plus or minus..
-        self.transformed_df.to_csv(Path(export_path_with_file),
-                                   sep=separator,
-                                   header=has_header,
-                                   index=False,
-                                   encoding=self.encoding,
-                                   mode='x',
-                                   quotechar='"')
+        # wrapped this in the same concurrent.futures routine as the analyzing above to not let the ui lose connection
+        # connection loss still happens, but it seems that the UI can reconnect when we use this.
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            loop = get_running_loop()
+            await loop.run_in_executor(
+                executor,
+                lambda: self.transformed_df.to_csv(
+                            Path(export_path_with_file),
+                            sep=separator,
+                            header=has_header,
+                            index=False,
+                            encoding=self.encoding,
+                            mode='x',
+                            quotechar='"')
+            )
 
 
 async def load_file_and_set_dataframe() -> None:
@@ -213,7 +221,7 @@ async def choose_file() -> str:
 
 
 async def transform_and_save_file() -> None:
-    loading_spinner_file.set_visibility(True)
+    export_spinner.set_visibility(True)
     download_and_swap_button.set_visibility(False)
     file_types = ('CSV Files (*.csv)', 'All files (*.*)')
     target_path = await app.native.main_window.create_file_dialog(allow_multiple=False, file_types=file_types, dialog_type=webview.FOLDER_DIALOG)
@@ -223,11 +231,11 @@ async def transform_and_save_file() -> None:
         await fileHandler.export_file(target_path, export_separator.value)
     except Exception as e:
         ui.notify(e)
-        loading_spinner_file.set_visibility(False)
+        export_spinner.set_visibility(False)
         download_and_swap_button.set_visibility(True)
         return
     await sleep(0.1)
-    loading_spinner_file.set_visibility(False)
+    export_spinner.set_visibility(False)
     download_and_swap_button.set_visibility(True)
     ui.notify("File exported successfully.")
 
