@@ -211,6 +211,8 @@ async def reload_file_and_dataframe() -> None:
         analyze_button.update()
         loading_spinner_file.set_visibility(False)
         path_label.set_visibility(True)
+        result_table.set_visibility(False)
+        data_table.set_visibility(False)
     else:
         ui.notify("No file loaded.")
 
