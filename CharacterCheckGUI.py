@@ -1,4 +1,4 @@
-from re import escape, sub
+from re import escape
 from pathlib import Path
 from subprocess import check_call
 from sys import executable, exit
@@ -6,9 +6,15 @@ import concurrent.futures
 from asyncio import sleep, get_running_loop
 from datetime import datetime
 
-## remember to save .pyw file for use on desktop!
+### This script allows the user to check all values within a .csv file for one (or more) characters. The script shows
+### the number of occurances within the columns of the csv and allows the user to preview 10 rows to get an idea of the
+### values.
+### The user also can chose to re-export the csv file, changing the separator and/or changing a substring within all
+### values to something else to eliminate crossover with the separator.
 
-# Function to install packages
+
+# Function to install packages if run in an environment with lacking dependencies.
+# This probably is not best practice, a requirements-txt would probably be better.
 def install(package):
     check_call([executable, "-m", "pip", "install", package])
 
@@ -34,11 +40,13 @@ except ImportError:
 # list with available encodings for pandas.read_csv().
 available_encodings = ['ascii','big5','big5hkscs','cp037','cp273','cp424','cp437','cp500','cp720','cp737','cp775','cp850','cp852','cp855','cp856','cp857','cp858','cp860','cp861','cp862','cp863','cp864','cp865','cp866','cp869','cp874','cp875','cp932','cp949','cp950','cp1006','cp1026','cp1125','cp1140','cp1250','cp1251','cp1252','cp1253','cp1254','cp1255','cp1256','cp1257','cp1258','euc_jp','euc_jis_2004','euc_jisx0213','euc_kr','gb2312','gbk','gb18030','hz','iso2022_jp','iso2022_jp_1','iso2022_jp_2','iso2022_jp_2004','iso2022_jp_3','iso2022_jp_ext','iso2022_kr','latin_1','iso8859_2','iso8859_3','iso8859_4','iso8859_5','iso8859_6','iso8859_7','iso8859_8','iso8859_9','iso8859_10','iso8859_11','iso8859_13','iso8859_14','iso8859_15','iso8859_16','johab','koi8_r','koi8_t','koi8_u','kz1048','mac_cyrillic','mac_greek','mac_iceland','mac_latin2','mac_roman','mac_turkish','ptcp154','shift_jis','shift_jis_2004','shift_jisx0213','utf_32','utf_32_be','utf_32_le','utf_16','utf_16_be','utf_16_le','utf_7','utf_8','utf_8_sig']
 
+# we are doing lookups later on using regex (within pd.df.replace) and need to escape these chars if the user wants
+# to search for them.
 characters_to_escape_in_regex = ['.', '+', '*', '?', '^', '$', '(', ')', '[', ']', '{', '}', '|', '\\']
 
 
-
 class FileHandler:
+    """Singleton which handles the loading of the csv, the string replacement and the export"""
     _instance = None
 
     def __init__(self, file_path, encoding):
@@ -60,6 +68,8 @@ class FileHandler:
         return cls._instance
 
     def toggle_header_mode(self, event) -> None:
+        """Sets the header mode for csv import. Theoretically pd.read_csv allows for more than 1 header. We are limiting
+        this to 1 header for now."""
         if event:
             self.file_header = 0 # zero based row index!
         else:
@@ -75,6 +85,7 @@ class FileHandler:
             self.path = None
 
     def set_dataframe_from_filepath(self) -> None:
+        """Grabs dataframe from csv file and sets total length of the df within the fileHandler class."""
         # for some reason this does not work for .pyw files any longer..
         if self.supress_unnamed_columns:
             # usecols=lambda c: not c.startswith('Unnamed:') we use this to surpress unnamed cols in broken csvs
@@ -87,12 +98,16 @@ class FileHandler:
         self.dataframe_length = len(self.dataframe)
 
     def set_encoding(self, encoding: str) -> None:
+        """Set file decoding for import of csv. Defaults to latin_1 if some invalid encoding is provided."""
+        encoding = encoding.lower().replace("-","_")
         if encoding not in available_encodings:
             self.encoding = 'latin_1'
         else:
-            self.encoding = encoding.lower().replace("-","_")
+            self.encoding = encoding
 
     def update_check_values_and_regex(self) -> None:
+        """Updates the characters to check the df for and build the regex pattern for lookup of multiple chars using
+        | (or)"""
         self.check_chars = list(set(self.check_char_user_input.split(" ")))
         # in case the user has a trailing space we get an empty string in the list, this removes that:
         if '' in self.check_chars:
@@ -110,6 +125,8 @@ class FileHandler:
             self.check_chars_regex = '|'.join(self.check_chars)
 
     async def analyze_dataframe(self) -> None:
+        """Checks all columns in the dataframe for occurances of the specified characters; info on which columns contain
+        the chars and how often."""
         # for col in self.dataframe:
         #     filtered_df = self.dataframe[self.dataframe[col].astype(str).str.contains(self.check_char, na=False)]
         #     if not filtered_df.empty:
@@ -137,11 +154,14 @@ class FileHandler:
         return self.dataframe[
             self.dataframe[column_name].astype(str).str.contains(self.check_chars_regex, na=False)].head(head)
 
-    async def transform_file(self, char_out: str, char_in: str) -> None:
+    async def transform_df(self, char_out: str, char_in: str) -> None:
+        """Prepares a transformed dataframe which is a copy of the initial dataframe loaded to the fileHanlder but with
+        the specified character substituted out."""
         char_out = escape(char_out)
         self.transformed_df = self.dataframe.replace({char_out: char_in}, regex=True)
 
     async def export_file(self, export_path: str, separator: str) -> None:
+        """Saves the transformed dataframe to disc as .csv."""
         timestamp = datetime.now().strftime('%Y_%m_%d %H_%M_%S')
         file_name = f"{self.path.stem}_{timestamp}"
         file_suffix = self.path.suffix # should be .csv anyhow
@@ -171,6 +191,7 @@ class FileHandler:
 
 
 async def load_file_and_set_dataframe() -> None:
+    """Trigger point for load of the csv file into the fileHandlers dataframe. Actives and deactivates several UI elements."""
     analyze_button.set_visibility(False)
     analyze_button.update()
     data_table.set_visibility(False)
@@ -204,6 +225,8 @@ async def load_file_and_set_dataframe() -> None:
 
 
 async def reload_file_and_dataframe() -> None:
+    """Trigger point for load of the csv file into the fileHandlers dataframe. Actives and deactivates several UI elements.
+    Allows the user to reload the file without having to chose it from the file dialog again."""
     if fileHandler.path is not None:
         analyze_button.set_visibility(False)
         analyze_button.update()
@@ -234,13 +257,15 @@ async def choose_file() -> str:
 
 
 async def transform_and_save_file() -> None:
+    """Triggering function for the export of the transformed csv to disc. Triggers the associated fileHandlers functions
+    and hides/shows some ui elements."""
     export_spinner.set_visibility(True)
     download_and_swap_button.set_visibility(False)
     file_types = ('CSV Files (*.csv)', 'All files (*.*)')
     target_path = await app.native.main_window.create_file_dialog(allow_multiple=False, file_types=file_types, dialog_type=webview.FOLDER_DIALOG)
     target_path = target_path[0] # create_file_dialog returns a list, we only want the first entry
     try:
-        await fileHandler.transform_file(swap_out_character.value, swap_in_character.value)
+        await fileHandler.transform_df(swap_out_character.value, swap_in_character.value)
         await fileHandler.export_file(target_path, export_separator.value)
     except Exception as e:
         ui.notify(e)
