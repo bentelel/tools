@@ -6,11 +6,8 @@ from sys import executable
 import concurrent.futures
 import asyncio
 
-import nicegui
-import pandas
 
-
-## does not run from desktop yet >> building wheels for webview fails..
+## remember to save .pyw file for use on desktop!
 
 # Function to install packages
 def install(package):
@@ -28,12 +25,12 @@ except ImportError:
     install('chardet')
     import chardet
 
-try:
-    import webview
-except ImportError:
+#try:
+#    import webview
+#except ImportError:
     #check_call([executable, "-m", "pip", "install", "--upgrade" ,"pip"])
-    install('webview')
-    import webview
+#    install('webview')
+#    import webview
 
 
 try:
@@ -53,7 +50,7 @@ class FileHandler:
     _instance = None
 
     def __init__(self, file_path, encoding):
-        self.path = Path('/abc/123')
+        self.path = None # should probably change this to None, but maybe something breaks then?
         self.dataframe = pd.DataFrame([])
         self.encoding = 'latin_1'
         self.check_char_user_input = ','
@@ -61,11 +58,18 @@ class FileHandler:
         self.check_chars_regex = ','
         self.cols_with_char = {}
         self.dataframe_length = 0
+        self.file_header = 1
 
     def __new__(cls, file_path, encoding):
         if cls._instance is None:
             cls._instance = super(FileHandler, cls).__new__(cls)
         return cls._instance
+
+    def toggle_header_mode(self, event) -> None:
+        if event:
+            self.file_header = 1
+        else:
+            self.file_header = None
 
     def set_check_char(self, character: str) -> None:
         self.check_char_user_input = character.encode(self.encoding)
@@ -74,17 +78,20 @@ class FileHandler:
         if file_path:
             self.path = Path(file_path)
         else:
-            self.path = Path('/abc/123')
+            self.path = None
 
     def set_dataframe_from_filepath(self) -> None:
-        self.dataframe = pd.read_csv(self.path, encoding=self.encoding, low_memory=False)
-        self.dataframe_length = len(self.dataframe)
+        try:
+            self.dataframe = pd.read_csv(self.path, encoding=self.encoding, low_memory=False, header=self.file_header)
+            self.dataframe_length = len(self.dataframe)
+        except Exception as e:
+            ui.notify(f"No filepath set. \n {e}")
 
     def set_encoding(self, encoding: str) -> None:
         if encoding not in available_encodings:
             self.encoding = 'latin_1'
         else:
-            self.encoding = encoding.lower.replace("-","_")
+            self.encoding = encoding.lower().replace("-","_")
 
     def update_check_values_and_regex(self) -> None:
         self.check_chars = list(set(self.check_char_user_input.split(" ")))
@@ -125,7 +132,7 @@ class FileHandler:
                     len_df = len(filtered_df)
                     self.cols_with_char[col] = (len_df, f"{len_df/self.dataframe_length * 100:.2f}%")
 
-    def get_filtered_rows(self, column_name: str ,head: int =10) -> pandas.DataFrame:
+    def get_filtered_rows(self, column_name: str ,head: int =10) -> pd.DataFrame:
         """returns the top x rows (head, default 10) of the dataframe filtered on column column_name and on the chars
         in self.check_chars_regex"""
         return self.dataframe[
@@ -150,10 +157,30 @@ async def load_file_and_set_dataframe() -> None:
     path_label.text = str(fileHandler.path)
 
 
+async def reload_file_and_dataframe() -> None:
+    if fileHandler.path is not None:
+        analyze_button.set_visibility(False)
+        analyze_button.update()
+        path_label.set_visibility(False)
+        loading_spinner_file.set_visibility(True)
+        # we need this so the control is yielded back to the event loop and the ui is updated, without this the spinner is
+        # not shown.
+        await asyncio.sleep(0.1)
+        fileHandler.set_dataframe_from_filepath()
+        analyze_button.set_visibility(True)
+        analyze_button.update()
+        loading_spinner_file.set_visibility(False)
+        path_label.set_visibility(True)
+    else:
+        ui.notify("No file loaded.")
+
+
 async def choose_file() -> str:
     file_types = ('CSV Files (*.csv)', 'All files (*.*)') # for some reason i can not only use the CSV part here. idk..
     # this always returns a list of files even when only 1 is chosen.
-    files = await app.native.main_window.create_file_dialog(webview.OPEN_DIALOG, allow_multiple=False, file_types=file_types)
+    # webview.OPEN_DIALOG, this was part of the arguments of create_file_dialog. but i cant install webview outside of
+    #pycharm. it seems to be not needed!
+    files = await app.native.main_window.create_file_dialog(allow_multiple=False, file_types=file_types)
     return files[0]
 
 
@@ -212,9 +239,14 @@ if __name__ in ("__main__", "__mp_main__"):
         data_view = ui.tab('Data Preview')
     with ui.tab_panels(tabs, value=main_page).classes('w-full') as panels:
         with ui.tab_panel(main_page):
-            ui.select(available_encodings, label='File encoding', with_input=True, value='latin_1').bind_value(
-                fileHandler, 'encoding')
-            ui.button('choose file', on_click=load_file_and_set_dataframe)
+            with ui.row():
+                encoding_menu = ui.select(available_encodings, label='File encoding', with_input=True, value='latin_1')
+                encoding_menu.bind_value(fileHandler, 'encoding')
+                file_has_headers = ui.checkbox("File has headers", value=True)
+                file_has_headers.on_value_change(lambda e: fileHandler.toggle_header_mode(e.value))
+            with ui.row():
+                choose_file_button = ui.button('choose file', on_click=load_file_and_set_dataframe)
+                reload_file_Button = ui.button('reload file', on_click=reload_file_and_dataframe)
 
             with ui.expansion('file:', value=True).classes('w-full'):
                 path_label = ui.label('--no file chosen--')
