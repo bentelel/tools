@@ -5,6 +5,7 @@ from subprocess import check_call
 from sys import executable
 import concurrent.futures
 import asyncio
+from datetime import datetime
 
 
 ## remember to save .pyw file for use on desktop!
@@ -32,11 +33,16 @@ except ImportError:
 #    install('webview')
 #    import webview
 
+try:
+    import webview
+except ImportError:
+    install('pywebview')
+    import webview
+
 
 try:
     from nicegui import ui, app
 except ImportError:
-    install('pywebview')
     install('nicegui')
     from nicegui import ui, app
 
@@ -59,6 +65,7 @@ class FileHandler:
         self.cols_with_char = {}
         self.dataframe_length = 0
         self.file_header = 1
+        self.transformed_df = pd.DataFrame([])
 
     def __new__(cls, file_path, encoding):
         if cls._instance is None:
@@ -81,11 +88,8 @@ class FileHandler:
             self.path = None
 
     def set_dataframe_from_filepath(self) -> None:
-        try:
-            self.dataframe = pd.read_csv(self.path, encoding=self.encoding, low_memory=False, header=self.file_header)
-            self.dataframe_length = len(self.dataframe)
-        except Exception as e:
-            ui.notify(f"No filepath set. \n {e}")
+        self.dataframe = pd.read_csv(self.path, encoding=self.encoding, low_memory=False, header=self.file_header)
+        self.dataframe_length = len(self.dataframe)
 
     def set_encoding(self, encoding: str) -> None:
         if encoding not in available_encodings:
@@ -138,18 +142,54 @@ class FileHandler:
         return self.dataframe[
             self.dataframe[column_name].astype(str).str.contains(self.check_chars_regex, na=False)].head(head)
 
+    async def transform_file(self, char_out: str, char_in: str) -> None:
+        char_out = re.escape(char_out)
+        self.transformed_df = self.dataframe.replace({char_out: char_in}, regex=True)
+
+    async def export_file(self, export_path: str, separator: str) -> None:
+        timestamp = datetime.now().strftime('%Y_%m_%d %H_%M_%S')
+        file_name = f"{self.path.stem}_{timestamp}"
+        file_suffix = self.path.suffix # should be .csv anyhow
+        export_path_with_file = f"{export_path}/{file_name}{file_suffix}"
+        print(export_path_with_file)
+        if self.file_header is None:
+            has_header = False
+        else:
+            has_header = True
+        # currently we loose the quoting around values if it is not needed, even when it is present in the initial
+        # file. I am not sure if that is a plus or minus..
+        self.transformed_df.to_csv(Path(export_path_with_file),
+                                   sep=separator,
+                                   header=has_header,
+                                   index=False,
+                                   encoding=self.encoding,
+                                   mode='x',
+                                   quotechar='"')
+
 
 async def load_file_and_set_dataframe() -> None:
     analyze_button.set_visibility(False)
     analyze_button.update()
-    file_path = await choose_file()
+    try:
+        file_path = await choose_file()
+    except Exception as e:
+        ui.notify(f"Path couldn't be set. \n {e}")
+        return
     path_label.set_visibility(False)
     loading_spinner_file.set_visibility(True)
     # we need this so the control is yielded back to the event loop and the ui is updated, without this the spinner is
     # not shown.
     await asyncio.sleep(0.1)
-    fileHandler.set_file_path(file_path)
-    fileHandler.set_dataframe_from_filepath()
+    try:
+        fileHandler.set_file_path(file_path)
+    except Exception as e:
+        ui.notify(f"Path couldn't be set. \n {e}")
+        return
+    try:
+        fileHandler.set_dataframe_from_filepath()
+    except Exception as e:
+        ui.notify(f"Dataframe couldn't be build. \n {e}")
+        return
     analyze_button.set_visibility(True)
     analyze_button.update()
     loading_spinner_file.set_visibility(False)
@@ -182,6 +222,22 @@ async def choose_file() -> str:
     #pycharm. it seems to be not needed!
     files = await app.native.main_window.create_file_dialog(allow_multiple=False, file_types=file_types)
     return files[0]
+
+
+async def transform_and_save_file() -> None:
+    loading_spinner_file.set_visibility(True)
+    download_and_swap_button.set_visibility(False)
+    file_types = ('CSV Files (*.csv)', 'All files (*.*)')
+    target_path = await app.native.main_window.create_file_dialog(allow_multiple=False, file_types=file_types, dialog_type=webview.FOLDER_DIALOG)
+    target_path = target_path[0] # create_file_dialog returns a list, we only want the first entry
+    try:
+        await fileHandler.transform_file(swap_out_character.value, swap_in_character.value)
+        await fileHandler.export_file(target_path, export_separator.value)
+    except Exception as e:
+        ui.notify(e)
+    await asyncio.sleep(0.1)
+    loading_spinner_file.set_visibility(False)
+    download_and_swap_button.set_visibility(True)
 
 
 def kill_script() -> None:
@@ -237,6 +293,7 @@ if __name__ in ("__main__", "__mp_main__"):
     with ui.tabs().classes('w-full') as tabs:
         main_page = ui.tab('Main Tab')
         data_view = ui.tab('Data Preview')
+        export_page = ui.tab('Export')
     with ui.tab_panels(tabs, value=main_page).classes('w-full') as panels:
         with ui.tab_panel(main_page):
             with ui.row():
@@ -273,6 +330,14 @@ if __name__ in ("__main__", "__mp_main__"):
             data_label = ui.label('')
             data_table = ui.table(columns=[], rows=[])
             data_table.set_visibility(False)
+        with ui.tab_panel(export_page):
+            with ui.row():
+                swap_out_character = ui.input(label='String to swap out', value=',')
+                swap_in_character = ui.input(label='String to swap in', value='@$@$@')
+                export_separator = ui.input(label='Separator', value=',')
+            download_and_swap_button = ui.button('Swap string and save file', on_click=transform_and_save_file)
+            export_spinner = ui.spinner(size='lg')
+            export_spinner.set_visibility(False)
 
     ui.run(native=True,
            dark=True,
