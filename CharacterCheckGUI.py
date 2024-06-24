@@ -82,8 +82,7 @@ class FileHandler:
                                          usecols=lambda c: not c.startswith('Unnamed:'))
         else:
             self.dataframe = pd.read_csv(self.path, encoding=self.encoding, low_memory=False, header=self.file_header
-                                         , dtype=str)
-        self.dataframe = self.dataframe.replace({nan: ''}, regex=True)
+                                         , dtype=str, na_values='')
         self.dataframe_length = len(self.dataframe)
 
     def set_encoding(self, encoding: str) -> None:
