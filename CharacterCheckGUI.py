@@ -238,9 +238,13 @@ async def transform_and_save_file() -> None:
         await fileHandler.export_file(target_path, export_separator.value)
     except Exception as e:
         ui.notify(e)
+        loading_spinner_file.set_visibility(False)
+        download_and_swap_button.set_visibility(True)
+        return
     await asyncio.sleep(0.1)
     loading_spinner_file.set_visibility(False)
     download_and_swap_button.set_visibility(True)
+    ui.notify("File exported successfully.")
 
 
 def kill_script() -> None:
