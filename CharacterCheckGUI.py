@@ -1,11 +1,10 @@
-from re import escape
+from re import escape, sub
 from pathlib import Path
 from subprocess import check_call
 from sys import executable, exit
 import concurrent.futures
 from asyncio import sleep, get_running_loop
 from datetime import datetime
-
 
 ## remember to save .pyw file for use on desktop!
 
@@ -139,8 +138,9 @@ class FileHandler:
         export_path_with_file = f"{export_path}/{file_name}{file_suffix}"
         num_decimals = decimals_slider.value
         # change all float dtype columns to string using the max num_decimals chosen by the user.
-        # doing this, we do not need float_format on the export any longer
-        self.transformed_df = self.transformed_df.applymap(lambda x: f"{x:.{num_decimals}f}".rstrip('0').rstrip('.') if isinstance(x, float) else x)
+        # doing this, we do not need float_format on the export any longer, this give us nan for earlier null values
+        # so we substitute the nan out with re.sub for an empty string.
+        self.transformed_df = self.transformed_df.applymap(lambda x: sub('nan', '', f"{x:.{num_decimals}f}".rstrip('0').rstrip('.')) if isinstance(x, float) else x)
         if self.file_header is None:
             has_header = False
         else:
