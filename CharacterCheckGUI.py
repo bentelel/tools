@@ -51,6 +51,7 @@ class FileHandler:
         self.dataframe_length = 0
         self.file_header = 0 # zero based row index!
         self.transformed_df = pd.DataFrame([])
+        self.supress_unnamed_columns = True
 
     def __new__(cls, file_path, encoding):
         if cls._instance is None:
@@ -73,7 +74,12 @@ class FileHandler:
             self.path = None
 
     def set_dataframe_from_filepath(self) -> None:
-        self.dataframe = pd.read_csv(self.path, encoding=self.encoding, low_memory=False, header=self.file_header)
+        if self.supress_unnamed_columns:
+            # usecols=lambda c: not c.startswith('Unnamed:') we use this to surpress unnamed cols in broken csvs
+            self.dataframe = pd.read_csv(self.path, encoding=self.encoding, low_memory=False, header=self.file_header,
+                                         usecols=lambda c: not c.startswith('Unnamed:'))
+        else:
+            self.dataframe = pd.read_csv(self.path, encoding=self.encoding, low_memory=False, header=self.file_header)
         self.dataframe_length = len(self.dataframe)
 
     def set_encoding(self, encoding: str) -> None:
@@ -307,8 +313,11 @@ if __name__ in ("__main__", "__mp_main__"):
             with ui.row():
                 encoding_menu = ui.select(available_encodings, label='File encoding', with_input=True, value='latin_1')
                 encoding_menu.bind_value(fileHandler, 'encoding')
-                file_has_headers = ui.checkbox("File has headers", value=True)
-                file_has_headers.on_value_change(lambda e: fileHandler.toggle_header_mode(e.value))
+                with ui.row():
+                    file_has_headers = ui.checkbox("File has headers", value=True)
+                    file_has_headers.on_value_change(lambda e: fileHandler.toggle_header_mode(e.value))
+                    supress_unnamed = ui.checkbox("Supress unnamed rows", value=True)
+                    supress_unnamed.bind_value(fileHandler, 'supress_unnamed_columns')
             with ui.row():
                 choose_file_button = ui.button('choose file', on_click=load_file_and_set_dataframe)
                 reload_file_Button = ui.button('reload file', on_click=reload_file_and_dataframe)
