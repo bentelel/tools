@@ -249,8 +249,10 @@ def kill_script() -> None:
 async def analyzer_click() -> None:
     try:
         result_table.set_visibility(False)
-        loading_spinner_analyzer.set_visibility(True)
+        data_label.set_visibility(False)
+        data_table.set_visibility(False)
         analyze_button.set_visibility(False)
+        loading_spinner_analyzer.set_visibility(True)
         await fileHandler.analyze_dataframe()
         populate_result_table()
         loading_spinner_analyzer.set_visibility(False)
