@@ -5,7 +5,6 @@ from sys import executable, exit
 import concurrent.futures
 from asyncio import sleep, get_running_loop
 from datetime import datetime
-from numpy import nan
 
 ## remember to save .pyw file for use on desktop!
 
@@ -78,7 +77,7 @@ class FileHandler:
         if self.supress_unnamed_columns:
             # usecols=lambda c: not c.startswith('Unnamed:') we use this to surpress unnamed cols in broken csvs
             self.dataframe = pd.read_csv(self.path, encoding=self.encoding, low_memory=False, header=self.file_header,
-                                         dtype=str,
+                                         dtype=str, na_values='',
                                          usecols=lambda c: not c.startswith('Unnamed:'))
         else:
             self.dataframe = pd.read_csv(self.path, encoding=self.encoding, low_memory=False, header=self.file_header
