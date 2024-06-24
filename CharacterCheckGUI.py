@@ -37,6 +37,7 @@ available_encodings = ['ascii','big5','big5hkscs','cp037','cp273','cp424','cp437
 characters_to_escape_in_regex = ['.', '+', '*', '?', '^', '$', '(', ')', '[', ']', '{', '}', '|', '\\']
 
 
+
 class FileHandler:
     _instance = None
 
@@ -74,11 +75,12 @@ class FileHandler:
             self.path = None
 
     def set_dataframe_from_filepath(self) -> None:
+        # for some reason this does not work for .pyw files any longer..
         if self.supress_unnamed_columns:
             # usecols=lambda c: not c.startswith('Unnamed:') we use this to surpress unnamed cols in broken csvs
             self.dataframe = pd.read_csv(self.path, encoding=self.encoding, low_memory=False, header=self.file_header,
-                                         dtype=str, na_values='',
-                                         usecols=lambda c: not c.startswith('Unnamed:'), engine='c')
+                                             dtype=str, na_values='',
+                                             usecols=lambda c: not c.startswith('Unnamed:'), engine='c')
         else:
             self.dataframe = pd.read_csv(self.path, encoding=self.encoding, low_memory=False, header=self.file_header
                                          , dtype=str, na_values='', engine='c')
