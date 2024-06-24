@@ -5,6 +5,7 @@ from sys import executable, exit
 import concurrent.futures
 from asyncio import sleep, get_running_loop
 from datetime import datetime
+from numpy import nan
 
 ## remember to save .pyw file for use on desktop!
 
@@ -77,9 +78,12 @@ class FileHandler:
         if self.supress_unnamed_columns:
             # usecols=lambda c: not c.startswith('Unnamed:') we use this to surpress unnamed cols in broken csvs
             self.dataframe = pd.read_csv(self.path, encoding=self.encoding, low_memory=False, header=self.file_header,
+                                         dtype=str,
                                          usecols=lambda c: not c.startswith('Unnamed:'))
         else:
-            self.dataframe = pd.read_csv(self.path, encoding=self.encoding, low_memory=False, header=self.file_header)
+            self.dataframe = pd.read_csv(self.path, encoding=self.encoding, low_memory=False, header=self.file_header
+                                         , dtype=str)
+        self.dataframe = self.dataframe.replace({nan: ''}, regex=True)
         self.dataframe_length = len(self.dataframe)
 
     def set_encoding(self, encoding: str) -> None:
@@ -142,11 +146,11 @@ class FileHandler:
         file_name = f"{self.path.stem}_{timestamp}"
         file_suffix = self.path.suffix # should be .csv anyhow
         export_path_with_file = f"{export_path}/{file_name}{file_suffix}"
-        num_decimals = decimals_slider.value
+        #num_decimals = decimals_slider.value # this shouldnt be needed any longer when we read all cols as str
         # change all float dtype columns to string using the max num_decimals chosen by the user.
         # doing this, we do not need float_format on the export any longer, this give us nan for earlier null values
         # so we substitute the nan out with re.sub for an empty string.
-        self.transformed_df = self.transformed_df.applymap(lambda x: sub('nan', '', f"{x:.{num_decimals}f}".rstrip('0').rstrip('.')) if isinstance(x, float) else x)
+        #self.transformed_df = self.transformed_df.applymap(lambda x: sub('nan', '', f"{x:.{num_decimals}f}".rstrip('0').rstrip('.')) if isinstance(x, float) else x)
         if self.file_header is None:
             has_header = False
         else:
@@ -353,11 +357,11 @@ if __name__ in ("__main__", "__mp_main__"):
                 swap_out_character = ui.input(label='String to swap out', value=',')
                 swap_in_character = ui.input(label='String to swap in', value='@$@$@')
                 export_separator = ui.input(label='Separator', value=',')
-                with ui.row():
-                    ui.label('Number of decimals for numeric values:')
-                    decimals_label = ui.label()
-                decimals_slider = ui.slider(min=0, max=30, step=1, value=9)
-                decimals_label.bind_text_from(decimals_slider, 'value')
+                #with ui.row():
+                #    ui.label('Number of decimals for numeric values:')
+                #    decimals_label = ui.label()
+                #decimals_slider = ui.slider(min=0, max=30, step=1, value=9)
+                #decimals_label.bind_text_from(decimals_slider, 'value')
             download_and_swap_button = ui.button('Swap string and save file', on_click=transform_and_save_file)
             export_spinner = ui.spinner(size='lg')
             export_spinner.set_visibility(False)
