@@ -1,10 +1,9 @@
-import re
-import sys
+from re import escape
 from pathlib import Path
 from subprocess import check_call
-from sys import executable
+from sys import executable, exit
 import concurrent.futures
-import asyncio
+from asyncio import sleep, get_running_loop
 from datetime import datetime
 
 
@@ -15,30 +14,17 @@ def install(package):
     check_call([executable, "-m", "pip", "install", package])
 
 try:
+    # be more succinct here, what do we need from pandas?
     import pandas as pd
 except ImportError:
     install('pandas')
     import pandas as pd
 
 try:
-    import chardet
-except ImportError:
-    install('chardet')
-    import chardet
-
-#try:
-#    import webview
-#except ImportError:
-    #check_call([executable, "-m", "pip", "install", "--upgrade" ,"pip"])
-#    install('webview')
-#    import webview
-
-try:
     import webview
 except ImportError:
     install('pywebview')
     import webview
-
 
 try:
     from nicegui import ui, app
@@ -106,7 +92,7 @@ class FileHandler:
         # escape characters which need to be escaped in regex (pop old one from list, add escaped version)
         for c in self.check_chars:
             if c in characters_to_escape_in_regex:
-                c_new = re.escape(c)
+                c_new = escape(c)
                 self.check_chars.remove(c)
                 new_chars.append(c_new)
         self.check_chars += new_chars
@@ -123,7 +109,7 @@ class FileHandler:
         # cpu_bound from nicegui without it breaking on larger sets. this seems to work, but i am not sure wtf is going on
         self.cols_with_char = {}
         with concurrent.futures.ThreadPoolExecutor() as executor:
-            loop = asyncio.get_running_loop()
+            loop = get_running_loop()
             for col in self.dataframe:
                 filtered_df = await loop.run_in_executor(
                     executor,
@@ -143,7 +129,7 @@ class FileHandler:
             self.dataframe[column_name].astype(str).str.contains(self.check_chars_regex, na=False)].head(head)
 
     async def transform_file(self, char_out: str, char_in: str) -> None:
-        char_out = re.escape(char_out)
+        char_out = escape(char_out)
         self.transformed_df = self.dataframe.replace({char_out: char_in}, regex=True)
 
     async def export_file(self, export_path: str, separator: str) -> None:
@@ -179,7 +165,7 @@ async def load_file_and_set_dataframe() -> None:
     loading_spinner_file.set_visibility(True)
     # we need this so the control is yielded back to the event loop and the ui is updated, without this the spinner is
     # not shown.
-    await asyncio.sleep(0.1)
+    await sleep(0.1)
     try:
         fileHandler.set_file_path(file_path)
     except Exception as e:
@@ -205,7 +191,7 @@ async def reload_file_and_dataframe() -> None:
         loading_spinner_file.set_visibility(True)
         # we need this so the control is yielded back to the event loop and the ui is updated, without this the spinner is
         # not shown.
-        await asyncio.sleep(0.1)
+        await sleep(0.1)
         fileHandler.set_dataframe_from_filepath()
         analyze_button.set_visibility(True)
         analyze_button.update()
@@ -241,7 +227,7 @@ async def transform_and_save_file() -> None:
         loading_spinner_file.set_visibility(False)
         download_and_swap_button.set_visibility(True)
         return
-    await asyncio.sleep(0.1)
+    await sleep(0.1)
     loading_spinner_file.set_visibility(False)
     download_and_swap_button.set_visibility(True)
     ui.notify("File exported successfully.")
@@ -250,7 +236,7 @@ async def transform_and_save_file() -> None:
 def kill_script() -> None:
     """this should trigger on shutdown of the ui and kill the rest of the script. for some reason this does not work
     cleanly. currently this is only pass through function to sys.exit()."""
-    sys.exit()
+    exit()
 
 
 async def analyzer_click() -> None:
