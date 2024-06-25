@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-
 from re import escape
 from pathlib import Path
 from subprocess import check_call
@@ -240,9 +238,12 @@ async def load_file_and_set_dataframe() -> None:
     loading_spinner_file.set_visibility(False)
     path_label.set_visibility(True)
     path_label.text = str(fileHandler.path)
+    df_shape = fileHandler.dataframe.shape
+    file_exp.text = f"File: {df_shape[1]} cols, {df_shape[0]} rows"
     loading_spinner_file.update()
     analyze_button.update()
     path_label.update()
+    file_exp.update()
 
 
 async def reload_file_and_dataframe() -> None:
@@ -264,6 +265,9 @@ async def reload_file_and_dataframe() -> None:
         result_table.set_visibility(False)
         data_table.set_visibility(False)
         data_label.set_visibility(False)
+        df_shape = fileHandler.dataframe.shape
+        file_exp.text = f"File: {df_shape[1]} cols, {df_shape[0]} rows"
+        file_exp.update()
     else:
         ui.notify("No file loaded.")
 
@@ -343,6 +347,8 @@ def drop_file_and_dataframe() -> None:
         data_label.set_visibility(False)
         encoding_menu.value = DEFAULT_ENCODING
         check_character_input.value = DEFAULT_CHAR_TO_CHECK
+        file_exp.text = "File:"
+        file_exp.update()
     else:
         ui.notify("No file loaded.")
 
@@ -382,7 +388,8 @@ if __name__ in ("__main__", "__mp_main__"):
                 choose_file_button = ui.button('choose file', on_click=load_file_and_set_dataframe)
                 reload_file_Button = ui.button('reload file', on_click=reload_file_and_dataframe)
                 drop_file_Button = ui.button('drop file', on_click=drop_file_and_dataframe)
-            with ui.expansion('file:', value=True).classes('w-full'):
+            file_exp = ui.expansion('file:', value=True).classes('w-full')
+            with file_exp:
                 path_label = ui.label('--no file chosen--')
                 loading_spinner_file = ui.spinner(size='lg')
                 loading_spinner_file.set_visibility(False)
