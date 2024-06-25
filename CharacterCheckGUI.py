@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 from re import escape
 from pathlib import Path
 from subprocess import check_call
@@ -45,20 +47,27 @@ available_encodings = ['ascii','big5','big5hkscs','cp037','cp273','cp424','cp437
 characters_to_escape_in_regex = ['.', '+', '*', '?', '^', '$', '(', ')', '[', ']', '{', '}', '|', '\\']
 
 
+DEFAULT_ENCODING = 'latin_1'
+DEFAULT_CHAR_TO_CHECK = ','
+DEFAULT_FILE_HEADER_NR = 0
+DEFAULT_DF_HEAD = 10
+WINDOW_WIDTH = 500
+WINDOW_HEIGHT = 800
+
 class FileHandler:
     """Singleton which handles the loading of the csv, the string replacement and the export"""
     _instance = None
 
     def __init__(self, file_path, encoding):
-        self.path = None # should probably change this to None, but maybe something breaks then?
+        self.path = None
         self.dataframe = pd.DataFrame([])
-        self.encoding = 'latin_1'
-        self.check_char_user_input = ','
-        self.check_chars = [',']
-        self.check_chars_regex = ','
+        self.encoding = DEFAULT_ENCODING
+        self.check_char_user_input = DEFAULT_CHAR_TO_CHECK
+        self.check_chars = [DEFAULT_CHAR_TO_CHECK]
+        self.check_chars_regex = DEFAULT_CHAR_TO_CHECK
         self.cols_with_char = {}
         self.dataframe_length = 0
-        self.file_header = 0 # zero based row index!
+        self.file_header = DEFAULT_FILE_HEADER_NR # zero based row index!
         self.transformed_df = pd.DataFrame([])
         self.supress_unnamed_columns = True
 
@@ -71,7 +80,7 @@ class FileHandler:
         """Sets the header mode for csv import. Theoretically pd.read_csv allows for more than 1 header. We are limiting
         this to 1 header for now."""
         if event:
-            self.file_header = 0 # zero based row index!
+            self.file_header = DEFAULT_FILE_HEADER_NR # zero based row index!
         else:
             self.file_header = None
 
@@ -83,6 +92,9 @@ class FileHandler:
             self.path = Path(file_path)
         else:
             self.path = None
+
+    def drop_df_and_reset_handler(self):
+        self.__init__('','')
 
     def set_dataframe_from_filepath(self) -> None:
         """Grabs dataframe from csv file and sets total length of the df within the fileHandler class."""
@@ -107,7 +119,7 @@ class FileHandler:
         """Set file decoding for import of csv. Defaults to latin_1 if some invalid encoding is provided."""
         encoding = encoding.lower().replace("-","_")
         if encoding not in available_encodings:
-            self.encoding = 'latin_1'
+            self.encoding = DEFAULT_ENCODING
         else:
             self.encoding = encoding
 
@@ -154,7 +166,7 @@ class FileHandler:
                     len_df = len(filtered_df)
                     self.cols_with_char[col] = (len_df, f"{len_df/self.dataframe_length * 100:.2f}%")
 
-    def get_filtered_rows(self, column_name: str ,head: int =10) -> pd.DataFrame:
+    def get_filtered_rows(self, column_name: str ,head: int = DEFAULT_DF_HEAD) -> pd.DataFrame:
         """returns the top x rows (head, default 10) of the dataframe filtered on column column_name and on the chars
         in self.check_chars_regex"""
         return self.dataframe[
@@ -322,10 +334,22 @@ def populate_result_table() -> None:
     result_table.update()
     result_table.set_visibility(True)
 
+def drop_file_and_dataframe() -> None:
+    if fileHandler.path is not None:
+        fileHandler.drop_df_and_reset_handler()
+        path_label.text = '--no file chosen--'
+        result_table.set_visibility(False)
+        data_table.set_visibility(False)
+        data_label.set_visibility(False)
+        encoding_menu.value = DEFAULT_ENCODING
+        check_character_input.value = DEFAULT_CHAR_TO_CHECK
+    else:
+        ui.notify("No file loaded.")
+
 
 def show_data_rows(col_name: str) -> None:
     data_label.text = col_name
-    filtered_df = fileHandler.get_filtered_rows(col_name, 10)
+    filtered_df = fileHandler.get_filtered_rows(col_name, DEFAULT_DF_HEAD)
     data_table.columns = [{'name': col, 'label': col, 'field': col} for col in filtered_df.columns]
     data_table.rows = filtered_df.to_dict('records')
     data_table.update()
@@ -347,7 +371,7 @@ if __name__ in ("__main__", "__mp_main__"):
     with ui.tab_panels(tabs, value=main_page).classes('w-full') as panels:
         with ui.tab_panel(main_page):
             with ui.row():
-                encoding_menu = ui.select(available_encodings, label='File encoding', with_input=True, value='latin_1')
+                encoding_menu = ui.select(available_encodings, label='File encoding', with_input=True, value=DEFAULT_ENCODING)
                 encoding_menu.bind_value(fileHandler, 'encoding')
                 with ui.row():
                     file_has_headers = ui.checkbox("File has headers", value=True)
@@ -357,14 +381,14 @@ if __name__ in ("__main__", "__mp_main__"):
             with ui.row():
                 choose_file_button = ui.button('choose file', on_click=load_file_and_set_dataframe)
                 reload_file_Button = ui.button('reload file', on_click=reload_file_and_dataframe)
-
+                drop_file_Button = ui.button('drop file', on_click=drop_file_and_dataframe)
             with ui.expansion('file:', value=True).classes('w-full'):
                 path_label = ui.label('--no file chosen--')
                 loading_spinner_file = ui.spinner(size='lg')
                 loading_spinner_file.set_visibility(False)
 
             # how can we make this so that we also update the value list and regex when this is changed
-            check_character_input = ui.input(label='Character to check for', value=',')
+            check_character_input = ui.input(label='Character to check for', value=DEFAULT_CHAR_TO_CHECK)
             check_character_input.bind_value(fileHandler, 'check_char_user_input')
             check_character_input.tooltip("You can add multiple values by separating them with a space")
             check_character_input.on_value_change(fileHandler.update_check_values_and_regex)
@@ -386,9 +410,9 @@ if __name__ in ("__main__", "__mp_main__"):
             data_table.set_visibility(False)
         with ui.tab_panel(export_page):
             with ui.row():
-                swap_out_character = ui.input(label='String to swap out', value=',')
+                swap_out_character = ui.input(label='String to swap out', value=DEFAULT_CHAR_TO_CHECK)
                 swap_in_character = ui.input(label='String to swap in', value='@$@$@')
-                export_separator = ui.input(label='Separator', value=',')
+                export_separator = ui.input(label='Separator', value=DEFAULT_CHAR_TO_CHECK)
             download_and_swap_button = ui.button('Swap string and save file', on_click=transform_and_save_file)
             export_spinner = ui.spinner(size='lg')
             export_spinner.set_visibility(False)
@@ -397,6 +421,6 @@ if __name__ in ("__main__", "__mp_main__"):
            dark=True,
            reload=False,
            title='csv character analyzer',
-           window_size=(500,800),
+           window_size=(WINDOW_WIDTH,WINDOW_HEIGHT),
            favicon='CharacterCheckIcon_128.png')
     #favicon only works in browser mode, it seems we cant change the app icon in native mode.
