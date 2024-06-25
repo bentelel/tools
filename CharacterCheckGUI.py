@@ -102,31 +102,32 @@ class FileHandler:
         """Grabs dataframe from csv file and sets total length of the df within the fileHandler class."""
         # for some reason this does not work for .pyw files any longer..
         chunksize = 50000
-        if self.parsing_engine == 'python': # in conditional because low_memory is not supported by python engine
-            if self.supress_unnamed_columns:
-                # usecols=lambda c: not c.startswith('Unnamed:') we use this to surpress unnamed cols in broken csvs
-                chunks_iter = pd.read_csv(self.path, encoding=self.encoding, header=self.file_header,
-                                                 dtype=str, na_values='',
-                                                 usecols=lambda c: not c.startswith('Unnamed:'), engine='python', chunksize=chunksize
-                                          )
+        with open(self.path, 'r', encoding=self.encoding) as file: # maybe try to play around with the newline option here
+            if self.parsing_engine == 'python': # in conditional because low_memory is not supported by python engine
+                if self.supress_unnamed_columns:
+                    # usecols=lambda c: not c.startswith('Unnamed:') we use this to surpress unnamed cols in broken csvs
+                    chunks_iter = pd.read_csv(file, encoding=self.encoding, header=self.file_header,
+                                                     dtype=str, na_values='',
+                                                     usecols=lambda c: not c.startswith('Unnamed:'), engine='python', chunksize=chunksize
+                                              )
+                else:
+                    chunks_iter = pd.read_csv(file, encoding=self.encoding, low_memory=False, header=self.file_header
+                                                 , dtype=str, na_values='', engine='python', chunksize=chunksize)
+            elif self.parsing_engine == 'c':
+                if self.supress_unnamed_columns:
+                    # usecols=lambda c: not c.startswith('Unnamed:') we use this to surpress unnamed cols in broken csvs
+                    chunks_iter = pd.read_csv(file, encoding=self.encoding, low_memory=False, header=self.file_header,
+                                                     dtype=str, na_values='',
+                                                     usecols=lambda c: not c.startswith('Unnamed:'), engine='c', chunksize=chunksize
+                                              )
+                else:
+                    chunks_iter = pd.read_csv(file, encoding=self.encoding, low_memory=False, header=self.file_header
+                                                 , dtype=str, na_values='', engine='c', chunksize=chunksize)
             else:
-                chunks_iter = pd.read_csv(self.path, encoding=self.encoding, low_memory=False, header=self.file_header
-                                             , dtype=str, na_values='', engine='python', chunksize=chunksize)
-        elif self.parsing_engine == 'c':
-            if self.supress_unnamed_columns:
-                # usecols=lambda c: not c.startswith('Unnamed:') we use this to surpress unnamed cols in broken csvs
-                chunks_iter = pd.read_csv(self.path, encoding=self.encoding, low_memory=False, header=self.file_header,
-                                                 dtype=str, na_values='',
-                                                 usecols=lambda c: not c.startswith('Unnamed:'), engine='c', chunksize=chunksize
-                                          )
-            else:
-                chunks_iter = pd.read_csv(self.path, encoding=self.encoding, low_memory=False, header=self.file_header
-                                             , dtype=str, na_values='', engine='c', chunksize=chunksize)
-        else:
-            raise ValueError(f"Unsupported engine {self.parsing_engine}")
-        chunks = []
-        for chunk in chunks_iter:
-            chunks.append(chunk)
+                raise ValueError(f"Unsupported engine {self.parsing_engine}")
+            chunks = []
+            for chunk in chunks_iter:
+                chunks.append(chunk)
         self.dataframe = pd.concat(chunks, ignore_index=True)
         self.dataframe_length = len(self.dataframe)
 
