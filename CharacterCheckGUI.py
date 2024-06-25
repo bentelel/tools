@@ -72,6 +72,7 @@ class FileHandler:
         self.transformed_df = pd.DataFrame([])
         self.supress_unnamed_columns = True
         self.parsing_engine = 'c'
+        self.replace_linebreaks = True
 
     def __new__(cls, file_path, encoding):
         if cls._instance is None:
@@ -97,6 +98,10 @@ class FileHandler:
 
     def drop_df_and_reset_handler(self):
         self.__init__('','')
+
+
+    def read_csv_in_chunks(self, engine: str):
+        pass ## factor the reading of set_dataframe_from_filepath out to make the conditionals more manageable.
 
     def set_dataframe_from_filepath(self) -> None:
         """Grabs dataframe from csv file and sets total length of the df within the fileHandler class."""
@@ -124,11 +129,13 @@ class FileHandler:
                     chunks_iter = pd.read_csv(file, encoding=self.encoding, low_memory=False, header=self.file_header
                                                  , dtype=str, na_values='', engine='c', chunksize=chunksize)
             else:
-                raise ValueError(f"Unsupported engine {self.parsing_engine}")
+                raise ValueError(f"Unsupported engine: {self.parsing_engine}")
             chunks = []
             for chunk in chunks_iter:
                 chunks.append(chunk)
         self.dataframe = pd.concat(chunks, ignore_index=True)
+        if self.replace_linebreaks:
+            self.dataframe.replace({r'\n': '', r'\r': ''}, regex=True, inplace=True)
         self.dataframe_length = len(self.dataframe)
 
     def set_encoding(self, encoding: str) -> None:
@@ -400,11 +407,14 @@ if __name__ in ("__main__", "__mp_main__"):
                 parsing_engine_menu = ui.select(parsing_engines, label='csv Parsing engine', with_input=True, value=DEFAULT_PARSING_ENGINE)
                 parsing_engine_menu.tooltip("Use c for big csv, use python for anything else.")
                 parsing_engine_menu.bind_value(fileHandler, 'parsing_engine')
-                with ui.row():
-                    file_has_headers = ui.checkbox("File has headers", value=True)
-                    file_has_headers.on_value_change(lambda e: fileHandler.toggle_header_mode(e.value))
-                    supress_unnamed = ui.checkbox("Supress unnamed rows", value=True)
-                    supress_unnamed.bind_value(fileHandler, 'supress_unnamed_columns')
+            with ui.row():
+                file_has_headers = ui.checkbox("File has headers", value=True)
+                file_has_headers.on_value_change(lambda e: fileHandler.toggle_header_mode(e.value))
+                supress_unnamed = ui.checkbox("Supress unnamed rows", value=True)
+                supress_unnamed.bind_value(fileHandler, 'supress_unnamed_columns')
+                delete_linebreaks = ui.checkbox("Replace linebreaks", value=True)
+                delete_linebreaks.tooltip(r"Delete line breaks (\n, \r) within values.")
+                delete_linebreaks.bind_value(fileHandler, 'replace_linebreaks')
             with ui.row():
                 choose_file_button = ui.button('choose file', on_click=load_file_and_set_dataframe)
                 reload_file_Button = ui.button('reload file', on_click=reload_file_and_dataframe)
