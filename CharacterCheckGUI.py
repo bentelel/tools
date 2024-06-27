@@ -73,6 +73,7 @@ class FileHandler:
         self.supress_unnamed_columns = True
         self.parsing_engine = 'c'
         self.replace_linebreaks = True
+        self.chunk_size = 50000
 
     def __new__(cls, file_path, encoding):
         if cls._instance is None:
@@ -99,35 +100,39 @@ class FileHandler:
     def drop_df_and_reset_handler(self):
         self.__init__('','')
 
+    async def read_csv_in_chunks_c(self, file):
+        if self.supress_unnamed_columns:
+            # usecols=lambda c: not c.startswith('Unnamed:') we use this to surpress unnamed cols in broken csvs
+            chunks_iter = pd.read_csv(file, encoding=self.encoding, low_memory=False, header=self.file_header,
+                                      dtype=str, na_values='',
+                                      usecols=lambda c: not c.startswith('Unnamed:'), engine='c', chunksize=self.chunk_size
+                                      )
+        else:
+            chunks_iter = pd.read_csv(file, encoding=self.encoding, low_memory=False, header=self.file_header
+                                      , dtype=str, na_values='', engine='c', chunksize=self.chunk_size)
+        return chunks_iter
 
-    def read_csv_in_chunks(self, engine: str):
-        pass ## factor the reading of set_dataframe_from_filepath out to make the conditionals more manageable.
+    async def read_csv_in_chunks_python(self, file):
+        if self.supress_unnamed_columns:
+            # usecols=lambda c: not c.startswith('Unnamed:') we use this to surpress unnamed cols in broken csvs
+            chunks_iter = pd.read_csv(file, encoding=self.encoding, header=self.file_header,
+                                      dtype=str, na_values='',
+                                      usecols=lambda c: not c.startswith('Unnamed:'), engine='python',
+                                      chunksize=self.chunk_size
+                                      )
+        else:
+            chunks_iter = pd.read_csv(file, encoding=self.encoding, low_memory=False, header=self.file_header
+                                      , dtype=str, na_values='', engine='python', chunksize=self.chunk_size)
+        return chunks_iter
 
-    def set_dataframe_from_filepath(self) -> None:
+    async def set_dataframe_from_filepath(self) -> None:
         """Grabs dataframe from csv file and sets total length of the df within the fileHandler class."""
         # for some reason this does not work for .pyw files any longer..
-        chunksize = 50000
         with open(self.path, 'r', encoding=self.encoding) as file: # maybe try to play around with the newline option here
             if self.parsing_engine == 'python': # in conditional because low_memory is not supported by python engine
-                if self.supress_unnamed_columns:
-                    # usecols=lambda c: not c.startswith('Unnamed:') we use this to surpress unnamed cols in broken csvs
-                    chunks_iter = pd.read_csv(file, encoding=self.encoding, header=self.file_header,
-                                                     dtype=str, na_values='',
-                                                     usecols=lambda c: not c.startswith('Unnamed:'), engine='python', chunksize=chunksize
-                                              )
-                else:
-                    chunks_iter = pd.read_csv(file, encoding=self.encoding, low_memory=False, header=self.file_header
-                                                 , dtype=str, na_values='', engine='python', chunksize=chunksize)
+                chunks_iter = await self.read_csv_in_chunks_python(file)
             elif self.parsing_engine == 'c':
-                if self.supress_unnamed_columns:
-                    # usecols=lambda c: not c.startswith('Unnamed:') we use this to surpress unnamed cols in broken csvs
-                    chunks_iter = pd.read_csv(file, encoding=self.encoding, low_memory=False, header=self.file_header,
-                                                     dtype=str, na_values='',
-                                                     usecols=lambda c: not c.startswith('Unnamed:'), engine='c', chunksize=chunksize
-                                              )
-                else:
-                    chunks_iter = pd.read_csv(file, encoding=self.encoding, low_memory=False, header=self.file_header
-                                                 , dtype=str, na_values='', engine='c', chunksize=chunksize)
+                chunks_iter = await self.read_csv_in_chunks_c(file)
             else:
                 raise ValueError(f"Unsupported engine: {self.parsing_engine}")
             chunks = []
@@ -254,7 +259,7 @@ async def load_file_and_set_dataframe() -> None:
         ui.notify(f"Path couldn't be set. \n {e}")
         return
     try:
-        fileHandler.set_dataframe_from_filepath()
+        await fileHandler.set_dataframe_from_filepath()
     except Exception as e:
         ui.notify(f"Dataframe couldn't be build. \n {e}")
         return
@@ -269,6 +274,7 @@ async def load_file_and_set_dataframe() -> None:
     analyze_button.update()
     path_label.update()
     file_exp.update()
+    await sleep(0.1)
 
 
 async def reload_file_and_dataframe() -> None:
@@ -282,7 +288,7 @@ async def reload_file_and_dataframe() -> None:
         # we need this so the control is yielded back to the event loop and the ui is updated, without this the spinner is
         # not shown.
         await sleep(0.1)
-        fileHandler.set_dataframe_from_filepath()
+        await fileHandler.set_dataframe_from_filepath()
         analyze_button.set_visibility(True)
         analyze_button.update()
         loading_spinner_file.set_visibility(False)
