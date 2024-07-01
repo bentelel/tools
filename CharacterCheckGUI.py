@@ -61,6 +61,7 @@ class FileHandler:
 
     def __init__(self, file_path, encoding):
         self.path = None
+        self.seperator = ','
         self.dataframe = pd.DataFrame([])
         self.encoding = DEFAULT_ENCODING
         self.check_char_user_input = DEFAULT_CHAR_TO_CHECK
@@ -103,25 +104,25 @@ class FileHandler:
     async def read_csv_in_chunks_c(self, file):
         if self.supress_unnamed_columns:
             # usecols=lambda c: not c.startswith('Unnamed:') we use this to surpress unnamed cols in broken csvs
-            chunks_iter = pd.read_csv(file, encoding=self.encoding, low_memory=False, header=self.file_header,
+            chunks_iter = pd.read_csv(file, sep=self.seperator, encoding=self.encoding, low_memory=False, header=self.file_header,
                                       dtype=str, na_values='',
                                       usecols=lambda c: not c.startswith('Unnamed:'), engine='c', chunksize=self.chunk_size
                                       )
         else:
-            chunks_iter = pd.read_csv(file, encoding=self.encoding, low_memory=False, header=self.file_header
+            chunks_iter = pd.read_csv(file, sep=self.seperator, encoding=self.encoding, low_memory=False, header=self.file_header
                                       , dtype=str, na_values='', engine='c', chunksize=self.chunk_size)
         return chunks_iter
 
     async def read_csv_in_chunks_python(self, file):
         if self.supress_unnamed_columns:
             # usecols=lambda c: not c.startswith('Unnamed:') we use this to surpress unnamed cols in broken csvs
-            chunks_iter = pd.read_csv(file, encoding=self.encoding, header=self.file_header,
+            chunks_iter = pd.read_csv(file, sep=self.seperator, encoding=self.encoding, header=self.file_header,
                                       dtype=str, na_values='',
                                       usecols=lambda c: not c.startswith('Unnamed:'), engine='python',
                                       chunksize=self.chunk_size
                                       )
         else:
-            chunks_iter = pd.read_csv(file, encoding=self.encoding, low_memory=False, header=self.file_header
+            chunks_iter = pd.read_csv(file, sep=self.seperator, encoding=self.encoding, low_memory=False, header=self.file_header
                                       , dtype=str, na_values='', engine='python', chunksize=self.chunk_size)
         return chunks_iter
 
@@ -421,6 +422,8 @@ if __name__ in ("__main__", "__mp_main__"):
                 delete_linebreaks = ui.checkbox("Replace linebreaks", value=True)
                 delete_linebreaks.tooltip(r"Delete line breaks (\n, \r) within values.")
                 delete_linebreaks.bind_value(fileHandler, 'replace_linebreaks')
+                seperator_input = ui.input(label='csv separator', value=',')
+                seperator_input.bind_value(fileHandler, 'seperator')
             with ui.row():
                 choose_file_button = ui.button('choose file', on_click=load_file_and_set_dataframe)
                 reload_file_Button = ui.button('reload file', on_click=reload_file_and_dataframe)
